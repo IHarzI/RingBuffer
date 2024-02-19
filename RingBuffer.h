@@ -372,9 +372,10 @@ namespace harz {
 			ValueT* RingBuffer<ValueT, AllocatorT>::LookAtIndex(size_t index)
 			{
 				if (index >= capacity ||
-					elementsInside == 0 || 
+					elementsInside == 0 ||
 					index == InvalidIndex() ||
-					index < GetTailIndex() && index > GetHeadIndex())
+					index < GetTailIndex() && index > GetHeadIndex() ||
+					index > GetTailIndex() && index > GetHeadIndex() && GetTailIndex() <= GetHeadIndex())
 					return nullptr;
 				return (ValueT*)GetData() + index;
 			};
@@ -385,7 +386,8 @@ namespace harz {
 				if (index >= capacity ||
 					elementsInside == 0 ||
 					index == InvalidIndex() ||
-					index < GetTailIndex() && index > GetHeadIndex())
+					index < GetTailIndex() && index > GetHeadIndex() ||
+					index > GetTailIndex() && index > GetHeadIndex() && GetTailIndex() <= GetHeadIndex())
 					return nullptr;
 				return (ValueT*)GetData() + index;
 			};
@@ -402,25 +404,31 @@ namespace harz {
 						{
 							if (elementsInside > 0 && head != InvalidIndex())
 							{
-								size_t LastElementIndex = 0;
+								IndexT TailIndex = 0;
 
 								if (GetTailIndex() != InvalidIndex())
-									LastElementIndex = GetTailIndex();
+									TailIndex = GetTailIndex();
 
-								if (LastElementIndex > head)
+								if (TailIndex > head)
 								{
-									// cope first part(head) to the new place after tail inside newly allocated memory
-									detail::CopyMemory(GetData(), NewAllocatedMemory + (capacity - LastElementIndex), (head + 1) * sizeof(ValueT));
-									// cope second part(tail) from end of container to tail(in reverse order) into new memory, as first(in tail)
-									detail::CopyMemory(PointToValueAtIndex(LastElementIndex), NewAllocatedMemory, (elementsInside - (head + 1)) * sizeof(ValueT));
-
+									// Just copy value in loop
+									IndexT StartIndexForTailPart = 0;
+									for (IndexT copyIndex = TailIndex; copyIndex < capacity; copyIndex++)
+									{
+										*((ValueT*)NewAllocatedMemory + StartIndexForTailPart++) = *((ValueT*)MemoryBlock + copyIndex);
+									};
+									for (IndexT copyIndex = 0; copyIndex <= head; copyIndex++)
+									{
+										*((ValueT*)NewAllocatedMemory + StartIndexForTailPart++) = *((ValueT*)MemoryBlock + copyIndex);
+									};
+								
 									// Update info about container
 									head = elementsInside - 1;
 								}
 								else
 								{
 									// copy all elements into new container
-									detail::CopyMemory(GetData(), NewAllocatedMemory, head * sizeof(ValueT));
+									Memory::ph_copy_memory(GetData(), NewAllocatedMemory, head+1 * sizeof(ValueT));
 								}
 							};
 							m_InternalAllocator.Deallocate(GetData());
