@@ -1,5 +1,4 @@
 #pragma once
-
 /// -----------------------------------------------------------------------------
 /// 
 /// BSD 3-Clause License
@@ -404,7 +403,7 @@ namespace harz {
 						{
 							if (elementsInside > 0 && head != InvalidIndex())
 							{
-								IndexT TailIndex = 0;
+								size_t TailIndex = 0;
 
 								if (GetTailIndex() != InvalidIndex())
 									TailIndex = GetTailIndex();
@@ -412,23 +411,23 @@ namespace harz {
 								if (TailIndex > head)
 								{
 									// Just copy value in loop
-									IndexT StartIndexForTailPart = 0;
-									for (IndexT copyIndex = TailIndex; copyIndex < capacity; copyIndex++)
+									size_t StartIndexForTailPart = 0;
+									for (size_t copyIndex = TailIndex; copyIndex < capacity; copyIndex++)
 									{
 										*((ValueT*)NewAllocatedMemory + StartIndexForTailPart++) = *((ValueT*)MemoryBlock + copyIndex);
 									};
-									for (IndexT copyIndex = 0; copyIndex <= head; copyIndex++)
+									for (size_t copyIndex = 0; copyIndex <= head; copyIndex++)
 									{
 										*((ValueT*)NewAllocatedMemory + StartIndexForTailPart++) = *((ValueT*)MemoryBlock + copyIndex);
 									};
-								
+
 									// Update info about container
 									head = elementsInside - 1;
 								}
 								else
 								{
 									// copy all elements into new container
-									Memory::ph_copy_memory(GetData(), NewAllocatedMemory, head+1 * sizeof(ValueT));
+									detail::CopyMemory(GetData(), NewAllocatedMemory, head + 1 * sizeof(ValueT));
 								}
 							};
 							m_InternalAllocator.Deallocate(GetData());
