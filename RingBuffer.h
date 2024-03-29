@@ -77,6 +77,12 @@ namespace harz {
 				size_t PushFront(ValueT value);
 				size_t EmplaceFront(ValueT&& value);
 
+				inline void Clear()
+				{
+					head = InvalidIndex(); 
+					elementsInside = 0;
+				}
+
 				// Look at the first front element, don't use a pointer after pushes/emplacements elements inside the ring
 				ValueT* PeekFront();
 
