@@ -79,7 +79,7 @@ namespace harz {
 
 				inline void Clear()
 				{
-					head = InvalidIndex(); 
+					head = InvalidIndex();
 					elementsInside = 0;
 				}
 
@@ -123,6 +123,23 @@ namespace harz {
 
 				// Get tail index, in case of 0 elements, result will be InvalidIndex 
 				size_t GetTailIndex() const;
+
+				// Stuff for convenient loop and useful operators
+				inline ValueT& operator[](size_t index) { RING_BUFFER_ASSERT(index < capacity); return PointToValueAtIndex(index); }
+				inline const ValueT& operator[](size_t index) const { RING_BUFFER_ASSERT(index < capacity); return PointToValueAtIndex(index); }
+
+				inline ValueT& at(size_t index) { RING_BUFFER_ASSERT(index < capacity); return PointToValueAtIndex(index); }
+				inline const ValueT& at(size_t index) const { RING_BUFFER_ASSERT(index < capacity); return PointToValueAtIndex(index); }
+
+				// Same as GetSize, for ranges
+				inline constexpr size_t size() const { return elementsInside; };
+
+				inline constexpr ValueT* data() noexcept { return (ValueT*)MemoryBlock;
+				};
+				inline constexpr const ValueT* data() const noexcept { return (ValueT*)MemoryBlock; };
+
+				inline constexpr ValueT* begin()	const { return (ValueT*)MemoryBlock; };
+				inline constexpr ValueT* end()	const { return (ValueT*)(MemoryBlock) + size(); };
 
 				inline const size_t InvalidIndex() const { return size_t(-1); };
 
