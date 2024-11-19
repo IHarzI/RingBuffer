@@ -236,7 +236,7 @@ namespace harz {
 				/** Resets the iterator to the first element. */
 				void Reset()
 				{
-					auto& BeginIter = GetContainerRef().begin();
+					auto BeginIter = GetContainerRef().begin();
 					Index = BeginIter.Index;
 					Position = BeginIter.Position;
 				}
@@ -244,7 +244,7 @@ namespace harz {
 				/** Sets the iterator to one past the last element. */
 				void SetToEnd()
 				{
-					auto& EndIter = GetContainerRef().end();
+					auto EndIter = GetContainerRef().end();
 					Index = EndIter.Index;
 					Position = EndIter.Position;
 				}
