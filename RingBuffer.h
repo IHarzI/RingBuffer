@@ -8,15 +8,281 @@
 
 #include <vector>
 #include <memory.h>
+#include <intrin.h>
 
 #ifdef RING_BUFFER_DEBUG
 #include <cassert>
-#define RING_BUFFER_ASSERT(cond) assert(cond)
+#define RING_BUFFER_ASSERT(cond) if(!(cond)) __debugbreak();
 #define RING_BUFFER_REPORT(msg) std::cout << msg << '\n';
 #else
 #define RING_BUFFER_ASSERT(cond)
 #define RING_BUFFER_REPORT(msg)
 #endif
+
+#pragma once
+
+namespace harz {
+	namespace Containers {
+		namespace Iterators
+		{
+			enum class EIndexedAccessIteratorPosition
+			{
+				Begin,
+				End,
+				InRange,
+				Invalid
+			};
+
+			template<typename ContainerT, typename ValueT, typename SizeType, bool IsConstAccessOnly>
+			class TIndexedIteratorBase
+			{
+			protected:
+				SizeType Index;
+				EIndexedAccessIteratorPosition Position;
+				ContainerT* Container;
+			public:
+
+				TIndexedIteratorBase(const ContainerT& InContainer, SizeType StartIndex = InContainer.GetBeginIndex(),
+					EIndexedAccessIteratorPosition Pos = EIndexedAccessIteratorPosition::Begin);
+
+				TIndexedIteratorBase& operator=(const TIndexedIteratorBase& Other)
+				{
+					Index = Other.Index;
+					Container = Other.Container;
+					Position = Other.Position;
+					return *this;
+				};
+
+				TIndexedIteratorBase(const TIndexedIteratorBase&) = default;
+
+				TIndexedIteratorBase(TIndexedIteratorBase&&) = default;
+
+				~TIndexedIteratorBase()
+				{
+				};
+
+				inline const ValueT& operator* () const
+				{
+					RING_BUFFER_ASSERT(GetContainerRef().IsIndexValid(Index));
+					return GetContainerRef()[Index];
+				}
+
+				inline const ValueT* operator->() const
+				{
+					RING_BUFFER_ASSERT(GetContainerRef().IsIndexValid(Index));
+					return &GetContainerRef()[Index];
+				}
+
+				template <typename = std::enable_if<!IsConstAccessOnly>::type> ValueT& operator* ()
+				//inline ValueT& operator* ()
+				{
+					RING_BUFFER_ASSERT(GetContainerRef().IsIndexValid(Index));
+					return GetContainerRef()[Index];
+				}
+
+				template <typename = std::enable_if<!IsConstAccessOnly>::type> ValueT* operator->()
+				//inline ValueT* operator->()
+				{
+					RING_BUFFER_ASSERT(GetContainerRef().IsIndexValid(Index));
+					return &GetContainerRef()[Index];
+				}
+
+				TIndexedIteratorBase& operator++()
+				{
+					switch (Position)
+					{
+					case EIndexedAccessIteratorPosition::Begin:
+					{
+						Position = EIndexedAccessIteratorPosition::InRange;
+						// Continue in range scope
+					}
+					case EIndexedAccessIteratorPosition::InRange:
+					{
+						Index = GetContainerRef().GetNextIndexIter(Index); break;
+					}
+					case EIndexedAccessIteratorPosition::End:
+					{
+						Index = GetContainerRef().InvalidIndex();
+						Position = EIndexedAccessIteratorPosition::Invalid;
+						break;
+					};
+					};
+
+					if (Index == GetContainerRef().InvalidIndex())
+						Position = EIndexedAccessIteratorPosition::End;
+
+					return *this;
+				}
+
+				TIndexedIteratorBase& operator--()
+				{
+					switch (Position)
+					{
+					case EIndexedAccessIteratorPosition::Begin:
+					{
+						Position = EIndexedAccessIteratorPosition::Invalid;
+						Index = GetContainerRef().InvalidIndex();
+						break;
+					}
+					case EIndexedAccessIteratorPosition::End:
+					{
+						Position = EIndexedAccessIteratorPosition::InRange;
+						Index = GetContainerRef().GetEndIndex();
+						break;
+					};
+					case EIndexedAccessIteratorPosition::InRange:
+					{
+						Index = GetContainerRef().GetPreviousIndexIter(Index); break;
+					}
+					};
+
+					if (Index == GetContainerRef().InvalidIndex())
+						Position = EIndexedAccessIteratorPosition::Begin;
+
+					return *this;
+				}
+
+				/** iterator arithmetic support */
+				TIndexedIteratorBase& operator+=(SizeType Offset)
+				{
+					if (!Offset)
+						return *this;
+					switch (Position)
+					{
+					case EIndexedAccessIteratorPosition::Begin:
+					{
+						Position = EIndexedAccessIteratorPosition::InRange;
+						Index = GetContainerRef().GetBeginIndex();
+						// continue in range scope
+					}
+					case EIndexedAccessIteratorPosition::InRange:
+					{
+						Index = GetContainerRef().GetNextIndexIter(Index, Offset);
+
+						break;
+					}
+					case EIndexedAccessIteratorPosition::End:
+					{
+						Index = GetContainerRef().InvalidIndex();
+						Position = EIndexedAccessIteratorPosition::Invalid;
+						break;
+					};
+					};
+
+					if (Index == GetContainerRef().InvalidIndex())
+						Position = EIndexedAccessIteratorPosition::End;
+
+					return *this;
+				}
+
+				TIndexedIteratorBase operator+(SizeType Offset) const
+				{
+					TIndexedIteratorBase Tmp(*this);
+					Tmp += Offset;
+					return Tmp;
+				}
+
+				TIndexedIteratorBase& operator-=(SizeType Offset)
+				{
+					if (!Offset)
+						return *this;
+
+					switch (Position)
+					{
+					case EIndexedAccessIteratorPosition::Begin:
+					{
+						Position = EIndexedAccessIteratorPosition::Invalid;
+						Index = GetContainerRef().InvalidIndex();
+						break;
+					}
+					case EIndexedAccessIteratorPosition::End:
+					{
+						Position = EIndexedAccessIteratorPosition::InRange;
+						Index = GetContainerRef().GetEndIndex(Index);
+						// continue in range index
+						Offset -= 1;
+					};
+					case EIndexedAccessIteratorPosition::InRange:
+					{
+						Index = GetContainerRef().GetPreviousIndexIter(Index, Offset); break;
+					}
+					};
+
+					if (Index == GetContainerRef().InvalidIndex())
+						Position = EIndexedAccessIteratorPosition::Begin;
+
+					return *this;
+				}
+
+				TIndexedIteratorBase operator-(SizeType Offset) const
+				{
+					TIndexedIteratorBase Tmp(*this);
+					Tmp -= Offset;
+					return Tmp;
+				}
+
+				/** conversion to "bool" returning true if the iterator has not reached the last element. */
+				inline explicit operator bool() const
+				{
+					return Position == EIndexedAccessIteratorPosition::InRange && GetContainerRef().IsIndexValid(Index);
+				}
+
+				/** Returns an index to the current element. */
+				SizeType GetIndex() const
+				{
+					return Position = EIndexedAccessIteratorPosition::InRange ? Index : GetContainerRef().InvalidIndex();
+				}
+
+				/** Resets the iterator to the first element. */
+				void Reset()
+				{
+					auto& BeginIter = GetContainerRef().begin();
+					Index = BeginIter.Index;
+					Position = BeginIter.Position;
+				}
+
+				/** Sets the iterator to one past the last element. */
+				void SetToEnd()
+				{
+					auto& EndIter = GetContainerRef().end();
+					Index = EndIter.Index;
+					Position = EndIter.Position;
+				}
+
+				inline bool operator==(const TIndexedIteratorBase& Rhs) const {
+					return Container == Rhs.Container && Index == Rhs.Index && Position == Rhs.Position;
+				};
+
+				inline bool operator!=(const TIndexedIteratorBase& Rhs) const {
+					return Container != Rhs.Container || Index != Rhs.Index || Position != Rhs.Position;
+				};
+				protected:
+
+				ContainerT& GetContainerRef()
+				{
+					RING_BUFFER_ASSERT(Container);
+					return *Container;
+				};
+
+				const ContainerT& GetContainerRef() const
+				{
+					RING_BUFFER_ASSERT(Container);
+					return *Container;
+				};
+
+			};
+
+			template<typename ContainerT, typename ValueT, typename SizeType, bool IsConstAccessOnly>
+			inline TIndexedIteratorBase<ContainerT, ValueT, SizeType, IsConstAccessOnly>::TIndexedIteratorBase(const ContainerT& InContainer, SizeType StartIndex, EIndexedAccessIteratorPosition Pos)
+				: Container((const_cast<ContainerT*>(& InContainer)))
+				, Index(StartIndex)
+				, Position(Pos) 
+			{
+			}
+
+};
+	};
+};
 
 #ifdef RING_BUFFER_USE_SIMPLE_ALLOCATOR
 namespace harz {
@@ -66,9 +332,14 @@ namespace harz {
 			class RingBuffer
 			{
 			public:
+
+				using IndexedIterator = Iterators::TIndexedIteratorBase<RingBuffer, ValueT, size_t,false>;
+				using ConstIndexedIterator = Iterators::TIndexedIteratorBase<RingBuffer, ValueT, size_t, true>;
+
 				RingBuffer();
-				RingBuffer(RingBuffer& Other);
-				RingBuffer(RingBuffer&& Other);
+				RingBuffer(const RingBuffer& Other);
+				RingBuffer(const RingBuffer&& Other);
+				RingBuffer& operator=(const RingBuffer& Other);
 				RingBuffer(size_t capacity);
 				~RingBuffer();
 
@@ -84,16 +355,22 @@ namespace harz {
 				}
 
 				// Look at the first front element, don't use a pointer after pushes/emplacements elements inside the ring
-				ValueT* PeekFront();
+				IndexedIterator PeekFront();
 
 				// Look at the first back element, don't use a pointer after pushes/emplacements elements inside the ring
-				ValueT* PeekBack();
+				IndexedIterator PeekBack();
 
 				// Look at the first front element, don't use a pointer after pushes/emplacements elements inside the ring
-				const	ValueT* PeekFront()	const;
+				ConstIndexedIterator PeekFront()	const;
 
 				// Look at the first back element, don't use a pointer after pushes/emplacements elements inside the ring
-				const	ValueT* PeekBack()	const;
+				ConstIndexedIterator PeekBack()	const;
+
+				const ValueT& Front() const { return *PeekFront(); };
+				const ValueT& Back() const { return *PeekBack(); };
+
+				ValueT& Front() { return *PeekFront(); };
+				ValueT& Back() { return *PeekBack(); };
 
 				// Pop element from front
 				ValueT&& PopFront();
@@ -125,27 +402,231 @@ namespace harz {
 				size_t GetTailIndex() const;
 
 				// Stuff for convenient loop and useful operators
-				inline ValueT& operator[](size_t index) { RING_BUFFER_ASSERT(index < capacity); return PointToValueAtIndex(index); }
-				inline const ValueT& operator[](size_t index) const { RING_BUFFER_ASSERT(index < capacity); return PointToValueAtIndex(index); }
+				inline ValueT& operator[](size_t index) { RING_BUFFER_ASSERT(index < capacity); return *PointToValueAtIndex(index); }
+				inline const ValueT& operator[](size_t index) const { RING_BUFFER_ASSERT(index < capacity); return *PointToValueAtIndex(index); }
 
-				inline ValueT& at(size_t index) { RING_BUFFER_ASSERT(index < capacity); return PointToValueAtIndex(index); }
-				inline const ValueT& at(size_t index) const { RING_BUFFER_ASSERT(index < capacity); return PointToValueAtIndex(index); }
+				inline ValueT& at(size_t index) { RING_BUFFER_ASSERT(index < capacity); return *PointToValueAtIndex(index); }
+				inline const ValueT& at(size_t index) const { RING_BUFFER_ASSERT(index < capacity); return *PointToValueAtIndex(index); }
 
 				// Same as GetSize, for ranges
 				inline constexpr size_t size() const { return elementsInside; };
 
-				inline constexpr ValueT* data() noexcept { return (ValueT*)MemoryBlock;
+				inline constexpr ValueT* data() noexcept {
+					return (ValueT*)MemoryBlock;
 				};
-				inline constexpr const ValueT* data() const noexcept { return (ValueT*)MemoryBlock; };
 
-				inline constexpr ValueT* begin()	const { return (ValueT*)MemoryBlock; };
-				inline constexpr ValueT* end()	const { return (ValueT*)(MemoryBlock) + size(); };
+				inline constexpr const ValueT* data() const noexcept { return (ValueT*)MemoryBlock; };
 
 				inline const size_t InvalidIndex() const { return size_t(-1); };
 
+				inline IndexedIterator begin()
+				{
+					if(elementsInside)
+						return IndexedIterator{ *this, GetBeginIndex(), Iterators::EIndexedAccessIteratorPosition::Begin };
+
+					return end();
+				};
+
+				inline IndexedIterator end()
+				{
+					return IndexedIterator{ *this, InvalidIndex(),Iterators::EIndexedAccessIteratorPosition::End };
+				};
+
+				inline ConstIndexedIterator begin() const {
+					if (elementsInside)
+						return ConstIndexedIterator{*this, GetBeginIndex(),Iterators::EIndexedAccessIteratorPosition::Begin };
+
+					return end();
+				};
+
+				inline ConstIndexedIterator end() const
+				{
+					return ConstIndexedIterator{ *this, InvalidIndex(),Iterators::EIndexedAccessIteratorPosition::End };
+				};
+
+				inline bool IsIndexValid(size_t Index) const
+				{
+					if (Index >= capacity ||
+						elementsInside == 0 ||
+						Index == InvalidIndex() ||
+						Index < GetTailIndex() && Index > GetHeadIndex() ||
+						Index > GetTailIndex() && Index > GetHeadIndex() && GetTailIndex() <= GetHeadIndex())
+						return false;
+					return true;
+				};
+
 			private:
+				friend IndexedIterator;
+				friend ConstIndexedIterator;
+
+				inline size_t GetBeginIndex() const { return GetTailIndex(); };
+				inline size_t GetEndIndex() const { return GetHeadIndex(); };
+				inline size_t GetNextIndexIter(size_t index) const
+				{
+					if (index == InvalidIndex())
+					{
+						return InvalidIndex();
+					}
+
+					if (GetTailIndex() > GetHeadIndex())
+					{
+						if (index == GetCapacity() - 1)
+							index = 0;
+						else
+							index++;
+					}
+					else
+						index++;
+
+					if (!IsIndexValid(index))
+						return InvalidIndex();
+
+					return index;
+				};
+
+				inline size_t GetNextIndexIter(size_t index, size_t offset) const
+				{
+					if (!offset)
+						return;
+
+					if (index == InvalidIndex())
+					{
+						return InvalidIndex();
+					}
+
+					if (GetTailIndex() > GetHeadIndex())
+					{
+						if (index == GetCapacity() - 1)
+						{
+							if (offset - 1 > GetHeadIndex())
+								return InvalidIndex();
+
+							index = offset - 1; // 0 or 0+offset-1 items, as 0 is first item
+						}
+						else
+						{
+							if (index < GetCapacity() - 1)
+							{
+								size_t TailBackOffset = GetCapacity() - 1 - index;
+								if (offset > TailBackOffset)
+								{
+									size_t BackOffset = offset - TailBackOffset;
+									if (BackOffset - 1 > GetHeadIndex())
+										return InvalidIndex();
+									else
+										index = BackOffset - 1;
+								}
+								else
+									index += offset;
+							}
+							else
+							{
+								if (offset > GetHeadIndex())
+									return InvalidIndex();
+
+								index += offset;
+							}
+						};
+					}
+					else
+					{
+						if (GetTailIndex() + offset > GetHeadIndex())
+							return InvalidIndex();
+
+						index += offset;
+					}
+
+					if (!IsIndexValid(index))
+						return InvalidIndex();
+
+					return index;
+				};
+
+				inline size_t GetPreviousIndexIter(size_t index) const
+				{
+					if (index == InvalidIndex())
+					{
+						return InvalidIndex();
+					}
+
+					if (GetTailIndex() > GetHeadIndex())
+					{
+						if (index == 0)
+							index = GetCapacity() - 1;
+						else
+							index--;
+					}
+					else
+						index--;
+
+					if (!IsIndexValid(index))
+						return InvalidIndex();
+
+					return index;
+				};
+
+				inline size_t GetPreviousIndexIter(size_t index, size_t offset) const
+				{
+					if (!offset)
+						return;
+
+					if (index == InvalidIndex())
+					{
+						return InvalidIndex();
+					}
+
+					if (GetTailIndex() > GetHeadIndex())
+					{
+						if (index >= 0 && index <= GetHeadIndex())
+						{
+							size_t HeadBackOffset = index;
+							if (offset == HeadBackOffset + 1)
+								index = 0;
+							else
+							{
+								if (offset > HeadBackOffset + 1)
+								{
+									if (GetCapacity() - 1 - GetTailIndex() < offset - HeadBackOffset + 1)
+										return InvalidIndex;
+									else
+										index = GetCapacity() - (offset - HeadBackOffset + 1);
+								}
+								else
+								{
+									index -= offset;
+								}
+							}
+						}
+						else
+						{
+							if (offset > index - GetTailIndex())
+								return InvalidIndex();
+							else
+							{
+								index = index - offset;
+							}
+						}
+					}
+					else
+					{
+						if (index < offset - 1)
+							return InvalidIndex();
+						index -= offset;
+					}
+
+					if (!IsIndexValid(index))
+						return InvalidIndex();
+
+					return index;
+				};
+
+
+			private:
+
 				ValueT* PointToValueAtIndex(size_t index);
+				const ValueT* PointToValueAtIndex(size_t index) const;
 				inline ValueT** GetData() { return MemoryBlock; }
+				inline const ValueT** GetData() const { return (const ValueT**)MemoryBlock; }
 				inline size_t GetNextHeadIndex() const;
 				inline size_t GetNextTailIndex() const;
 				AllocatorT m_InternalAllocator = AllocatorT{};
@@ -162,25 +643,46 @@ namespace harz {
 			};
 
 			template<typename ValueT, typename AllocatorT>
-			RingBuffer<ValueT, AllocatorT>::RingBuffer(RingBuffer& Other)
+			RingBuffer<ValueT, AllocatorT>::RingBuffer(const RingBuffer& Other)
 			{
 				Resize(Other.capacity);
 				if (Other.elementsInside > 0)
 				{
-					detail::CopyMemory(Other.MemoryBlock, MemoryBlock, capacity);
-					head = Other.head;
-					elementsInside = Other.elementsInside;
+					for (auto& element : const_cast<RingBuffer&>(Other))
+					{
+						PushFront(element);
+					}
 				};
 			}
 
 			template<typename ValueT, typename AllocatorT>
-			RingBuffer<ValueT, AllocatorT>::RingBuffer(RingBuffer&& Other)
+			RingBuffer<ValueT, AllocatorT>::RingBuffer(const RingBuffer&& Other)
 			{
 				MemoryBlock = Other.MemoryBlock;
 				head = Other.head;
 				elementsInside = Other.elementsInside;
 				capacity = Other.capacity;
 				m_InternalAllocator = Other.m_InternalAllocator;
+
+				Other.MemoryBlock = nullptr;
+				Other.head = InvalidIndex();
+				Other.elementsInside = 0;
+				Other.capacity = 0;
+				Other.m_InternalAllocator = {};
+			}
+
+			template<typename ValueT, typename AllocatorT>
+			inline RingBuffer<ValueT, AllocatorT>& RingBuffer<ValueT, AllocatorT>::operator=(const RingBuffer& Other)
+			{
+				Resize(Other.capacity);
+				if (Other.elementsInside > 0)
+				{
+					for (auto& element : const_cast<RingBuffer&>(Other))
+					{
+						PushFront(element);
+					}
+				};
+				return *this;
 			};
 
 			template<typename ValueT, typename AllocatorT>
@@ -201,6 +703,10 @@ namespace harz {
 			{
 				if (MemoryBlock)
 				{
+					for (auto& element : *this)
+					{
+						element.~ValueT();
+					}
 					m_InternalAllocator.Deallocate(MemoryBlock);
 				}
 			};
@@ -295,42 +801,42 @@ namespace harz {
 			};
 
 			template<typename ValueT, typename AllocatorT>
-			ValueT* RingBuffer<ValueT, AllocatorT>::PeekFront()
+			RingBuffer<ValueT, AllocatorT>::IndexedIterator RingBuffer<ValueT, AllocatorT>::PeekFront()
 			{
-				ValueT* result = nullptr;
+				IndexedIterator result = end();
 
 				if (head != InvalidIndex())
-					result = PointToValueAtIndex(head);
+					result = IndexedIterator{*this, head , Iterators::EIndexedAccessIteratorPosition::InRange};
 				return result;
 			};
 
 			template<typename ValueT, typename AllocatorT>
-			ValueT* RingBuffer<ValueT, AllocatorT>::PeekBack()
+			RingBuffer<ValueT, AllocatorT>::IndexedIterator RingBuffer<ValueT, AllocatorT>::PeekBack()
 			{
-				ValueT* result = nullptr;
+				IndexedIterator result = end();
 
 				if (GetTailIndex() != InvalidIndex())
-					result = PointToValueAtIndex(GetTailIndex());
+					result = IndexedIterator{ *this, GetTailIndex() , Iterators::EIndexedAccessIteratorPosition::InRange};
 				return result;
 			};
 
 			template<typename ValueT, typename AllocatorT>
-			const ValueT* RingBuffer<ValueT, AllocatorT>::PeekFront() const
+			RingBuffer<ValueT, AllocatorT>::ConstIndexedIterator RingBuffer<ValueT, AllocatorT>::PeekFront() const
 			{
-				ValueT* result = nullptr;
+				ConstIndexedIterator result = end();
 
 				if (head != InvalidIndex())
-					result = PointToValueAtIndex(head);
+					result = ConstIndexedIterator{ *this, head , Iterators::EIndexedAccessIteratorPosition::InRange };
 				return result;
 			};
 
 			template<typename ValueT, typename AllocatorT>
-			const ValueT* RingBuffer<ValueT, AllocatorT>::PeekBack() const
+			RingBuffer<ValueT, AllocatorT>::ConstIndexedIterator RingBuffer<ValueT, AllocatorT>::PeekBack() const
 			{
-				ValueT* result = nullptr;
+				ConstIndexedIterator result = end();
 
 				if (GetTailIndex() != InvalidIndex())
-					result = PointToValueAtIndex(GetTailIndex());
+					result = ConstIndexedIterator{ *this, GetTailIndex() , Iterators::EIndexedAccessIteratorPosition::InRange };
 				return result;
 			};
 
@@ -488,6 +994,15 @@ namespace harz {
 
 			template<typename ValueT, typename AllocatorT>
 			inline ValueT* RingBuffer<ValueT, AllocatorT>::PointToValueAtIndex(size_t index)
+			{
+				if (index >= capacity)
+					return nullptr;
+
+				return (ValueT*)GetData() + index;
+			}
+
+			template<typename ValueT, typename AllocatorT>
+			inline const ValueT* RingBuffer<ValueT, AllocatorT>::PointToValueAtIndex(size_t index) const
 			{
 				if (index >= capacity)
 					return nullptr;
