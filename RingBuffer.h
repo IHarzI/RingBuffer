@@ -87,41 +87,73 @@ namespace harz {
 					return &GetContainerRef()[Index];
 				}
 
-				TIndexedIteratorBase& operator++()
+				void Increment()
 				{
 					switch (Position)
 					{
 					case EIndexedAccessIteratorPosition::Begin:
 					{
 						Position = EIndexedAccessIteratorPosition::InRange;
-						// Continue in range scope
+						Index = GetContainerRef().GetBeginIndex();
+						//break;
 					}
 					case EIndexedAccessIteratorPosition::InRange:
 					{
-						Index = GetContainerRef().GetNextIndexIter(Index); break;
+						Index = GetContainerRef().GetNextIndexIter(Index);
+						if (Index == GetContainerRef().InvalidIndex())
+							SetToEnd();
+						break;
 					}
 					case EIndexedAccessIteratorPosition::End:
 					{
-						Index = GetContainerRef().InvalidIndex();
-						Position = EIndexedAccessIteratorPosition::Invalid;
+						//Index = GetContainerRef().InvalidIndex();
+						//Position = EIndexedAccessIteratorPosition::Invalid;
+						SetToEnd();
 						break;
+					}
 					};
-					};
-
-					if (Index == GetContainerRef().InvalidIndex())
-						Position = EIndexedAccessIteratorPosition::End;
-
-					return *this;
 				}
 
-				TIndexedIteratorBase& operator--()
+				void Increment(SizeType Offset)
+				{
+					if (!Offset)
+						return;
+					switch (Position)
+					{
+						case EIndexedAccessIteratorPosition::Begin:
+						{
+							Position = EIndexedAccessIteratorPosition::InRange;
+							Index = GetContainerRef().GetBeginIndex();
+							// continue in range scope
+						}
+						case EIndexedAccessIteratorPosition::InRange:
+						{
+							Index = GetContainerRef().GetNextIndexIter(Index, Offset);
+
+							if (Index == GetContainerRef().InvalidIndex())
+								SetToEnd();
+
+							break;
+						}
+						case EIndexedAccessIteratorPosition::End:
+						{
+							//Index = GetContainerRef().InvalidIndex();
+							//Position = EIndexedAccessIteratorPosition::Invalid;
+							SetToEnd();
+							break;
+						}
+					};
+				}
+
+				void Decrement()
 				{
 					switch (Position)
 					{
 					case EIndexedAccessIteratorPosition::Begin:
 					{
-						Position = EIndexedAccessIteratorPosition::Invalid;
-						Index = GetContainerRef().InvalidIndex();
+						//Position = EIndexedAccessIteratorPosition::Invalid;
+						//Index = GetContainerRef().InvalidIndex();
+						SetToEnd(); // make iterator invalid by setting to end, as ranges use "end" for validity
 						break;
 					}
 					case EIndexedAccessIteratorPosition::End:
@@ -129,48 +161,99 @@ namespace harz {
 						Position = EIndexedAccessIteratorPosition::InRange;
 						Index = GetContainerRef().GetEndIndex();
 						break;
-					};
+					}
 					case EIndexedAccessIteratorPosition::InRange:
 					{
-						Index = GetContainerRef().GetPreviousIndexIter(Index); break;
+						Index = GetContainerRef().GetPreviousIndexIter(Index);
+						break;
 					}
 					};
+				}
 
-					if (Index == GetContainerRef().InvalidIndex())
-						Position = EIndexedAccessIteratorPosition::Begin;
+				void Decrement(SizeType Offset)
+				{
+					if (!Offset)
+						return;
+
+					switch (Position)
+					{
+						case EIndexedAccessIteratorPosition::Begin:
+						{
+							//Position = EIndexedAccessIteratorPosition::Invalid;
+							//Index = GetContainerRef().InvalidIndex();
+							SetToEnd();
+							break;
+						}
+						case EIndexedAccessIteratorPosition::End:
+						{
+							Position = EIndexedAccessIteratorPosition::InRange;
+							Index = GetContainerRef().GetEndIndex();
+							// continue in range index
+							Offset -= 1;
+
+							if (!Offset)
+								break;
+						}
+						case EIndexedAccessIteratorPosition::InRange:
+						{
+							Index = GetContainerRef().GetPreviousIndexIter(Index, Offset);
+							if (Index == GetContainerRef().InvalidIndex())
+								SetToEnd();
+							break;
+						}
+					};
+				}
+
+				TIndexedIteratorBase& operator++()
+				{
+					Increment();
+
+					//if (Index == GetContainerRef().InvalidIndex())
+					//	Position = EIndexedAccessIteratorPosition::End;
+					RING_BUFFER_ASSERT(*this == GetContainerRef().end() || Index != GetContainerRef().InvalidIndex());
 
 					return *this;
 				}
 
+				TIndexedIteratorBase& operator--()
+				{
+					Decrement();
+
+					//if (Index == GetContainerRef().InvalidIndex())
+					//	SetToEnd();
+					RING_BUFFER_ASSERT(*this == GetContainerRef().end() || Index != GetContainerRef().InvalidIndex());
+
+					return *this;
+				}
+
+				TIndexedIteratorBase& operator--(int)
+				{
+					Decrement();
+
+					//if (Index == GetContainerRef().InvalidIndex())
+					//	SetToEnd();
+					RING_BUFFER_ASSERT(*this == GetContainerRef().end() || Index != GetContainerRef().InvalidIndex());
+
+					return *this;
+				}
+
+				TIndexedIteratorBase& operator++(int)
+				{
+					Increment();
+
+					//if (Index == GetContainerRef().InvalidIndex())
+					//	Position = EIndexedAccessIteratorPosition::End;
+					RING_BUFFER_ASSERT(*this == GetContainerRef().end() || Index != GetContainerRef().InvalidIndex());
+
+					return *this;
+				}				
+
 				/** iterator arithmetic support */
 				TIndexedIteratorBase& operator+=(SizeType Offset)
 				{
-					if (!Offset)
-						return *this;
-					switch (Position)
-					{
-					case EIndexedAccessIteratorPosition::Begin:
-					{
-						Position = EIndexedAccessIteratorPosition::InRange;
-						Index = GetContainerRef().GetBeginIndex();
-						// continue in range scope
-					}
-					case EIndexedAccessIteratorPosition::InRange:
-					{
-						Index = GetContainerRef().GetNextIndexIter(Index, Offset);
+					Increment(Offset);
 
-						break;
-					}
-					case EIndexedAccessIteratorPosition::End:
-					{
-						Index = GetContainerRef().InvalidIndex();
-						Position = EIndexedAccessIteratorPosition::Invalid;
-						break;
-					};
-					};
-
-					if (Index == GetContainerRef().InvalidIndex())
-						Position = EIndexedAccessIteratorPosition::End;
+					RING_BUFFER_ASSERT(*this == GetContainerRef().end() || Index != GetContainerRef().InvalidIndex());
 
 					return *this;
 				}
@@ -184,32 +267,11 @@ namespace harz {
 
 				TIndexedIteratorBase& operator-=(SizeType Offset)
 				{
-					if (!Offset)
-						return *this;
+					Decrement(Offset);
 
-					switch (Position)
-					{
-					case EIndexedAccessIteratorPosition::Begin:
-					{
-						Position = EIndexedAccessIteratorPosition::Invalid;
-						Index = GetContainerRef().InvalidIndex();
-						break;
-					}
-					case EIndexedAccessIteratorPosition::End:
-					{
-						Position = EIndexedAccessIteratorPosition::InRange;
-						Index = GetContainerRef().GetEndIndex(Index);
-						// continue in range index
-						Offset -= 1;
-					};
-					case EIndexedAccessIteratorPosition::InRange:
-					{
-						Index = GetContainerRef().GetPreviousIndexIter(Index, Offset); break;
-					}
-					};
-
-					if (Index == GetContainerRef().InvalidIndex())
-						Position = EIndexedAccessIteratorPosition::Begin;
+					//if (Index == GetContainerRef().InvalidIndex())
+					//	Position = EIndexedAccessIteratorPosition::Begin;
+					RING_BUFFER_ASSERT(*this == GetContainerRef().end() || Index != GetContainerRef().InvalidIndex());
 
 					return *this;
 				}
@@ -225,6 +287,12 @@ namespace harz {
 				inline explicit operator bool() const
 				{
 					return Position == EIndexedAccessIteratorPosition::InRange && GetContainerRef().IsIndexValid(Index);
+				}
+
+				inline bool IsValidIter() const
+				{
+					return Position == EIndexedAccessIteratorPosition::InRange && GetContainerRef().IsIndexValid(Index) ||
+						Position == EIndexedAccessIteratorPosition::Begin;
 				}
 
 				/** Returns an index to the current element. */
@@ -258,7 +326,7 @@ namespace harz {
 				};
 				protected:
 
-				ContainerT& GetContainerRef()
+				template <typename = std::enable_if<!IsConstAccessOnly>::type> ContainerT& GetContainerRef()
 				{
 					RING_BUFFER_ASSERT(Container);
 					return *Container;
@@ -487,7 +555,7 @@ namespace harz {
 				inline size_t GetNextIndexIter(size_t index, size_t offset) const
 				{
 					if (!offset)
-						return;
+						return index;
 
 					if (index == InvalidIndex())
 					{
@@ -568,7 +636,7 @@ namespace harz {
 				inline size_t GetPreviousIndexIter(size_t index, size_t offset) const
 				{
 					if (!offset)
-						return;
+						return index;
 
 					if (index == InvalidIndex())
 					{
@@ -587,7 +655,7 @@ namespace harz {
 								if (offset > HeadBackOffset + 1)
 								{
 									if (GetCapacity() - 1 - GetTailIndex() < offset - HeadBackOffset + 1)
-										return InvalidIndex;
+										return InvalidIndex();
 									else
 										index = GetCapacity() - (offset - HeadBackOffset + 1);
 								}
